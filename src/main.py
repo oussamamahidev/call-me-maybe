@@ -6,19 +6,26 @@ import sys
 
 
 
-def main_loop(model, input_ids: list[int]) -> list[int]:
+def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
     input_ids.extend(model.encode('{\n"fn_name": ')[0].tolist())
 
     # for _ in range(max_new_tokens):
-    llm_output = model.encode('{\n"fn_name": ')[0].tolist()
+    llm_output = model.encode('{\n"fn_name":')[0].tolist()
     # print(llm_output)
     # print()
-    while model.decode(llm_output).count("}") < 2:
+    args_flag = True
+    while "}" not in model.decode(llm_output):
         output_ids = model.get_logits_from_input_ids(input_ids)
         next_token_id = max(range(len(output_ids)), key=lambda i: output_ids[i])
         input_ids.append(next_token_id)
         llm_output.append(next_token_id)
-        # print(model.decode(llm_output))
+        # print(model.decode(next_token_id))
+        if args_flag and "," in model.decode(llm_output):
+            input_ids.extend(model.encode('"arguments": {\n\t')[0].tolist())
+            llm_output.extend(model.encode('"arguments": {\n\t')[0].tolist())
+            args_flag = False
+        print(model.decode(llm_output))
+    llm_output.extend(model.encode('\n}')[0].tolist())
     return llm_output
 
 def prompt(test: str) -> str:
@@ -57,6 +64,8 @@ def prompt(test: str) -> str:
 
 def main():
     model = Small_LLM_Model()
+    # print(model.get_path_to_vocab_file())
+
     try:
         if "--input" in sys.argv:
             tests_file = sys.argv[sys.argv.index("--input") + 1]
@@ -95,11 +104,8 @@ def main():
                 }
             )
         # print(final_output_list)
-    except Exception:
-        print(
-            '\nerror with the tests_file (maybe is not structed right,'
-            ' verefied that he looks like list[dict{"prompt": ...}] )'
-            )
+    except Exception as e:
+        print(f'\nerror : {e}')
         sys.exit()
 
     try:

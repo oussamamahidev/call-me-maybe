@@ -1,10 +1,78 @@
 [
   {
-    "prompt": "What is the sum of 2.0 and 3.o?",
+    "prompt": "What is the sum of 2 and 3?",
     "fn_name": "fn_add_numbers",
     "args": {
-      "a": 2.0,
-      "b": 3.0
+      "a": 2,
+      "b": 3
+    }
+  },
+  {
+    "prompt": "What is the sum of 265 and 345?",
+    "fn_name": "fn_add_numbers",
+    "args": {
+      "a": 265,
+      "b": 345
+    }
+  },
+  {
+    "prompt": "Greet shrek",
+    "fn_name": "fn_greet",
+    "args": {
+      "name": "shrek"
+    }
+  },
+  {
+    "prompt": "Greet john",
+    "fn_name": "fn_greet",
+    "args": {
+      "name": "john"
+    }
+  },
+  {
+    "prompt": "Reverse the string 'hello'",
+    "fn_name": "fn_reverse_string",
+    "args": {
+      "s": "hello"
+    }
+  },
+  {
+    "prompt": "Reverse the string 'world'",
+    "fn_name": "fn_reverse_string",
+    "args": {
+      "s": "world"
+    }
+  },
+  {
+    "prompt": "What is the square root of 16?",
+    "fn_name": "fn_get_square_root",
+    "args": {
+      "a": 16
+    }
+  },
+  {
+    "prompt": "Calculate the square root of 144",
+    "fn_name": "fn_get_square_root",
+    "args": {
+      "a": 144
+    }
+  },
+  {
+    "prompt": "Replace all numbers in \"Hello 34 I'm 233 years old\" with NUMBERS",
+    "fn_name": "fn_substitute_string_with_regex",
+    "args": {
+      "source_string": "Hello 34 I'm 233 years old",
+      "regex": "([0-9]+)",
+      "replacement": "number"
+    }
+  },
+  {
+    "prompt": "Replace all vowels in 'Programming is fun' with asterisks",
+    "fn_name": "fn_substitute_string_with_regex",
+    "args": {
+      "source_string": "Programming is fun",
+      "regex": "([aeiouAEIOU])",
+      "replacement": "*****"
     }
   }
 ]
