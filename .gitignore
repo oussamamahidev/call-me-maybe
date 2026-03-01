@@ -2,3 +2,4 @@ __pycache__
 .venv
 *.pdf
 test.py
+hf_cache
