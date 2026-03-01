@@ -3,3 +3,4 @@ __pycache__
 *.pdf
 test.py
 hf_cache
+.mypy_cache
