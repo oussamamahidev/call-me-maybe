@@ -1,12 +1,12 @@
-#export HF_HOME=/goinfre/berrabia/call_me/hf_cache
-
 from llm_sdk import Small_LLM_Model
 import json
 import sys
 
-
-import json
-
+def mask_logits(logits, allowed_ids):
+    for i in range(len(logits)):
+        if i not in allowed_ids:
+            logits[i] = -float("inf")
+    return logits
 
 def main_loop(model, input_ids: list[int]) -> list[int]:
 
@@ -33,6 +33,7 @@ def main_loop(model, input_ids: list[int]) -> list[int]:
     selected_function = None
     param_keys = []
     param_index = 0
+    current_param_name = None
     current_param_type = None
 
     llm_output = []
@@ -40,11 +41,7 @@ def main_loop(model, input_ids: list[int]) -> list[int]:
     # -------------------------------------------------
     # Helper: mask everything except allowed tokens
     # -------------------------------------------------
-    def mask_logits(logits, allowed_ids):
-        for i in range(len(logits)):
-            if i not in allowed_ids:
-                logits[i] = -float("inf")
-        return logits
+
 
     # -------------------------------------------------
     # GENERATION LOOP
@@ -127,6 +124,7 @@ def main_loop(model, input_ids: list[int]) -> list[int]:
                 continue
 
             param = param_keys[param_index]
+            current_param_name = param
             current_param_type = selected_function["parameters"][param]["type"]
 
             tokens = model.encode(f'"{param}": ')[0].tolist()
@@ -265,8 +263,14 @@ def main_loop(model, input_ids: list[int]) -> list[int]:
                 llm_output.extend(tokens)
 
                 # now allow content characters
+                # tighter cap for regex strings to avoid runaway patterns
+                max_string_steps = 20 if current_param_name == "regex" else 128
+                char_limit = 32 if current_param_name == "regex" else None
+                char_count = 0
+                string_steps = 0
                 while True:
 
+                    string_steps += 1
                     logits = model.get_logits_from_input_ids(input_ids)
                     allowed_ids = set()
 
@@ -276,13 +280,24 @@ def main_loop(model, input_ids: list[int]) -> list[int]:
                         if "\n" in token_str or "\t" in token_str:
                             continue
 
-                        # allow closing quote
+                        # allow closing quote always
                         if token_str == '"':
                             allowed_ids.add(token_id)
+                            continue
 
-                        # allow normal characters
-                        elif token_str.isalnum() or token_str in [" ", "_"]:
-                            allowed_ids.add(token_id)
+                        # allow readable tokens that do not contain quotes
+                        if current_param_name == "regex":
+                            # limit to common regex characters to reduce runaway generations
+                            if '"' in token_str:
+                                continue
+                            if (
+                                token_str.isalnum()
+                                or token_str in [" ", "_", "-", ".", "*", "+", "?", "|", "[", "]", "(", ")", "{", "}", "^", "$", "\\"]
+                            ):
+                                allowed_ids.add(token_id)
+                        else:
+                            if '"' not in token_str:
+                                allowed_ids.add(token_id)
 
                     logits = mask_logits(logits, allowed_ids)
                     next_token = max(range(len(logits)), key=lambda i: logits[i])
@@ -292,6 +307,21 @@ def main_loop(model, input_ids: list[int]) -> list[int]:
                     llm_output.append(next_token)
 
                     if token_str == '"':
+                        break
+
+                    if char_limit is not None:
+                        char_count += len(token_str)
+                        if char_count >= char_limit:
+                            close_tokens = model.encode('"')[0].tolist()
+                            input_ids.extend(close_tokens)
+                            llm_output.extend(close_tokens)
+                            break
+
+                    if string_steps >= max_string_steps:
+                        # force close to avoid infinite loops
+                        close_tokens = model.encode('"')[0].tolist()
+                        input_ids.extend(close_tokens)
+                        llm_output.extend(close_tokens)
                         break
 
                 state = "ARG_AFTER_VALUE"

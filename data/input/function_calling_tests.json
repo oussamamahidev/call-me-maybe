@@ -13,8 +13,7 @@
   },
   {
     "prompt": "Reverse the string 'hello'"
-  }
-  ,
+  },
   {
     "prompt": "Reverse the string 'world'"
   },
@@ -29,5 +28,8 @@
   },
   {
     "prompt": "Replace all vowels in 'Programming is fun' with asterisks"
+  },
+  {
+    "prompt": "Substitute the word 'cat' with 'dog' in 'The cat sat on the mat with another cat'"
   }
 ]
