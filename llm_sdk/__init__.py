@@ -60,13 +60,13 @@ class Small_LLM_Model:
             # ensure we have a pad token to keep batch helpers happy
             self._tokenizer.pad_token_id = self._tokenizer.eos_token_id
 
-        self._model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
+        self._model: Any
+        self._model = AutoModelForCausalLM.from_pretrained(
             model_name,
             torch_dtype=self._dtype,
             device_map="auto" if self._device == "cuda" else None,
             trust_remote_code=trust_remote_code,
         )
-        self._model: PreTrainedModel
         self._model.to(self._device)
         self._model.eval()
 
@@ -85,7 +85,7 @@ class Small_LLM_Model:
         """Inverse of :py:meth:`encode`. Removes special tokens."""
         if isinstance(ids, torch.Tensor):
             ids = ids.tolist()
-        return self._tokenizer.decode(ids, skip_special_tokens=True)
+        return str(self._tokenizer.decode(ids, skip_special_tokens=True))
 
 
     def get_logits_from_input_ids(self, input_ids: list[int]) -> list[float]:

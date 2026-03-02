@@ -1,15 +1,17 @@
 import json
 import sys
-from typing import List, Dict, Any
+from typing import List, Any
+from llm_sdk import Small_LLM_Model
 
-def mask_logits(logits, allowed_ids):
+
+def mask_logits(logits: List, allowed_ids: Any) -> Any:
     for i in range(len(logits)):
         if i not in allowed_ids:
             logits[i] = -float("inf")
     return logits
 
 
-def main_loop(model, input_ids: list[int]) -> list[int]:
+def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
 
     # -------------------------------------------------
     # Load vocab
@@ -53,6 +55,7 @@ def main_loop(model, input_ids: list[int]) -> list[int]:
 
         print(model.decode(llm_output))
         logits = model.get_logits_from_input_ids(input_ids)
+        # print(logits)
         allowed_ids = set()
 
         # =====================================================
@@ -146,8 +149,6 @@ def main_loop(model, input_ids: list[int]) -> list[int]:
             # NUMBER TYPE
             # -----------------------
             if current_param_type == "number":
-                # Let the model emit digits (and at most one '.') until a comma (next param)
-                # or a closing brace (last param). Caps protect against runaway zeros.
                 seen_decimal = False
                 max_steps = 16
                 max_digits = 12
@@ -178,7 +179,10 @@ def main_loop(model, input_ids: list[int]) -> list[int]:
                                 allowed_ids.add(token_id)
 
                     logits = mask_logits(logits, allowed_ids)
-                    next_token = max(range(len(logits)), key=lambda i: logits[i])
+                    next_token = max(
+                        range(len(logits)),
+                        key=lambda i: logits[i]
+                        )
                     token_str = id_to_token[next_token]
 
                     input_ids.append(next_token)
@@ -192,7 +196,6 @@ def main_loop(model, input_ids: list[int]) -> list[int]:
                             and digit_count >= 2
                             and param_index == len(param_keys) - 1
                         ):
-                            # Avoid runaway trailing zeros on the last numeric param
                             input_ids.pop()
                             llm_output.pop()
                             digit_count -= 1
@@ -204,7 +207,6 @@ def main_loop(model, input_ids: list[int]) -> list[int]:
                             if token_str != "0":
                                 nonzero_after_decimal = True
 
-                            # If we have many fractional zeros and no significant digits, strip them.
                             if digits_after_decimal >= 4 and not nonzero_after_decimal:
                                 # remove decimal and its trailing zeros
                                 while len(input_ids) > decimal_index:
@@ -290,7 +292,6 @@ def main_loop(model, input_ids: list[int]) -> list[int]:
 
                         # allow readable tokens that do not contain quotes
                         if current_param_name == "regex":
-                            # limit to common regex characters to reduce runaway generations
                             if '"' in token_str:
                                 continue
                             if (
@@ -303,7 +304,10 @@ def main_loop(model, input_ids: list[int]) -> list[int]:
                                 allowed_ids.add(token_id)
 
                     logits = mask_logits(logits, allowed_ids)
-                    next_token = max(range(len(logits)), key=lambda i: logits[i])
+                    next_token = max(
+                        range(len(logits)),
+                        key=lambda i: logits[i]
+                        )
                     token_str = id_to_token[next_token]
 
                     input_ids.append(next_token)
@@ -351,8 +355,6 @@ def main_loop(model, input_ids: list[int]) -> list[int]:
         # CLOSE JSON
         # =====================================================
         elif state == "END_STRUCT":
-            # If the last token already closed the arguments object (e.g., number path),
-            # only close the outer JSON. Otherwise close both arguments and the root.
             decoded = model.decode(llm_output).rstrip()
             closing_text = '\n}\n' if decoded.endswith('}') else '\n}\n}\n'
             tokens = model.encode(closing_text)[0].tolist()
