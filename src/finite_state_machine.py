@@ -207,7 +207,10 @@ def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
                             if token_str != "0":
                                 nonzero_after_decimal = True
 
-                            if digits_after_decimal >= 4 and not nonzero_after_decimal:
+                            if (
+                                digits_after_decimal >= 4
+                                and not nonzero_after_decimal
+                            ):
                                 # remove decimal and its trailing zeros
                                 while len(input_ids) > decimal_index:
                                     input_ids.pop()
@@ -296,7 +299,13 @@ def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
                                 continue
                             if (
                                 token_str.isalnum()
-                                or token_str in [" ", "_", "-", ".", "*", "+", "?", "|", "[", "]", "(", ")", "{", "}", "^", "$", "\\"]
+                                or (
+                                    token_str in
+                                    [
+                                        " ", "_", "-",
+                                        ".", "*", "+", "?", "|",
+                                        "[", "]", "(", ")", "{",
+                                        "}", "^", "$", "\\"])
                             ):
                                 allowed_ids.add(token_id)
                         else:
