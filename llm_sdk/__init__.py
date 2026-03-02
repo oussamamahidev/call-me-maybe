@@ -2,7 +2,7 @@
 # ABOUTME: Provides Small_LLM_Model class for loading and running causal language models.
 
 import time
-from typing import Tuple
+from typing import Tuple, Any
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenizer, PreTrainedModel, logging
@@ -53,7 +53,7 @@ class Small_LLM_Model:
         self._dtype = dtype
 
         # --- load tokenizer & model -------------------------------------------------
-        self._tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
+        self._tokenizer: Any = AutoTokenizer.from_pretrained(
             model_name, trust_remote_code=trust_remote_code
         )
         if self._tokenizer.pad_token_id is None:
@@ -66,6 +66,7 @@ class Small_LLM_Model:
             device_map="auto" if self._device == "cuda" else None,
             trust_remote_code=trust_remote_code,
         )
+        self._model: PreTrainedModel
         self._model.to(self._device)
         self._model.eval()
 
