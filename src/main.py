@@ -54,7 +54,7 @@ def main() -> None:
             tests_file = sys.argv[sys.argv.index("--input") + 1]
         else:
             tests_file = "data/input/function_calling_tests.json"
-    except IndexError:
+    except Exception:
         tests_file = "data/input/function_calling_tests.json"
 
     try:
@@ -62,7 +62,7 @@ def main() -> None:
             results_file = sys.argv[sys.argv.index("--output") + 1]
         else:
             results_file = "data/output/function_calling_results.json"
-    except IndexError:
+    except Exception:
         results_file = "data/output/function_calling_results.json"
 
     try:

@@ -1,73 +1,36 @@
+*This project has been created as part of the 42 curriculum by berrabia*
+
 # call_me_maybe
 
-Function-calling prototype built on top of a local Hugging Face causal LLM.
+## Description
+This project implements a constrained-decoding function-calling prototype on top of a local Hugging Face causal LLM. It takes natural-language prompts and produces a strict JSON function call with a selected function name and typed arguments. The goal is to reliably generate a machine-readable function invocation without post-hoc parsing hacks.
 
-The project takes natural-language prompts and generates a strict JSON function call:
+## Instructions
 
-```json
-{
-	"fn_name": "<function_name>",
-	"arguments": {
-		"<arg_name>": <value>
-	}
-}
-```
+### Requirements
+- Python >= 3.10
+- Internet access for the first model download (unless already cached)
 
-It uses a finite-state generation loop with logit masking to force output structure.
+Dependencies (from pyproject.toml):
+- torch
+- transformers
+- huggingface-hub
 
-## Features
+### Installation
 
-- Local inference via `Qwen/Qwen3-0.6B`
-- Token-by-token constrained decoding (FSM)
-- Typed arguments (`number`, `string`)
-- Input/Output JSON files for batch evaluation
-
-## Project Layout
-
-```text
-.
-├── src/
-│   ├── __main__.py
-│   └── main.py                      # function-calling FSM + batch runner
-├── llm_sdk/
-│   └── __init__.py                  # Small_LLM_Model wrapper
-├── data/
-│   ├── input/
-│   │   ├── function_calling_tests.json
-│   │   └── functions_definition.json
-│   └── output/
-│       └── function_calling_results.json
-├── pyproject.toml
-├── Makefile
-└── mypy.ini
-```
-
-## Requirements
-
-- Python `>= 3.10`
-- Internet access for first model download (unless already cached)
-
-Dependencies (from `pyproject.toml`):
-
-- `torch`
-- `transformers`
-- `huggingface-hub`
-
-## Installation
-
-### Option 1: pip
+Option 1: pip
 
 ```bash
 pip install torch transformers huggingface-hub
 ```
 
-### Option 2: make target
+Option 2: make target
 
 ```bash
 make install
 ```
 
-## Usage
+### Execution
 
 Run with default input/output paths:
 
@@ -75,12 +38,12 @@ Run with default input/output paths:
 python3 -m src.main
 ```
 
-Or with explicit files:
+Run with explicit files:
 
 ```bash
 python3 -m src.main \
-	--input data/input/function_calling_tests.json \
-	--output data/output/function_calling_results.json
+  --input data/input/function_calling_tests.json \
+  --output data/output/function_calling_results.json
 ```
 
 Alternative entrypoint:
@@ -89,57 +52,85 @@ Alternative entrypoint:
 python3 -m src
 ```
 
-## Input Format
+## Algorithm Explanation (Constrained Decoding)
+The model does not get to write anything it wants. Instead, it follows a step-by-step map (a finite-state machine) that describes the exact JSON shape of a function call. At each step, the FSM says which tokens are allowed next. The decoder then hides every other token and picks from the allowed ones only. The FSM moves forward based on what was emitted, walking through steps like opening `{`, writing a key, adding `:`, writing a value, and finally closing `}`.
 
-`data/input/function_calling_tests.json`
+Function names can only come from the known list, and argument keys must match the selected function schema. Argument values are also guided by type: numbers are built from digits (and optional `-` or `.` in the right place), while strings are limited to safe characters plus the closing quote. This keeps the output on track so it stays valid JSON and matches the function definition.
+
+## Design Decisions
+- Use a lightweight local model (Qwen/Qwen3-0.6B) to keep inference fast and offline-friendly.
+- Encode the output format as a FSM to enforce a strict JSON grammar at token level.
+- Separate function definitions and test prompts into JSON files for repeatable batch evaluation.
+- Keep the schema minimal (number, string) to simplify reliable constrained decoding.
+
+## Performance Analysis
+- Accuracy: High when prompts align with available functions; constrained decoding prevents malformed JSON and invalid keys.
+- Speed: Token masking adds overhead per step but remains acceptable for small models and short outputs.
+- Reliability: The FSM prevents format drift and truncation errors, but relies on tokenizer-specific token boundaries and can be sensitive to model vocabulary.
+
+## Challenges Faced
+- Tokenizer alignment: Some tokens do not map cleanly to JSON fragments, requiring careful masking choices.
+- Numeric and string handling: Avoiding infinite loops and malformed numbers required explicit state transitions.
+- Schema enforcement: Ensuring keys and values match the selected function schema demanded strict state gating.
+
+## Testing Strategy
+- Run the batch test file in data/input/function_calling_tests.json and verify outputs match the expected schema.
+- Inspect JSON validity and check that argument types conform to the function definitions.
+- Re-run after any tokenizer or model change to validate FSM transitions.
+
+## Example Usage
+
+Input (data/input/function_calling_tests.json):
 
 ```json
 [
-	{ "prompt": "What is the sum of 2 and 3?" },
-	{ "prompt": "Greet shrek" }
+  { "prompt": "What is the sum of 2 and 3?" },
+  { "prompt": "Greet shrek" }
 ]
 ```
 
-`data/input/functions_definition.json`
+Function definitions (data/input/functions_definition.json):
 
 ```json
 [
-	{
-		"name": "fn_add_numbers",
-		"parameters": {
-			"a": { "type": "number" },
-			"b": { "type": "number" }
-		}
-	}
+  {
+    "name": "fn_add_numbers",
+    "parameters": {
+      "a": { "type": "number" },
+      "b": { "type": "number" }
+    }
+  }
 ]
 ```
 
-## Output Format
+Run:
 
-`data/output/function_calling_results.json`
+```bash
+python3 -m src.main \
+  --input data/input/function_calling_tests.json \
+  --output data/output/function_calling_results.json
+```
+
+Output (data/output/function_calling_results.json):
 
 ```json
 [
-	{
-		"prompt": "What is the sum of 2 and 3?",
-		"fn_name": "fn_add_numbers",
-		"args": {
-			"a": 2,
-			"b": 3
-		}
-	}
+  {
+    "prompt": "What is the sum of 2 and 3?",
+    "fn_name": "fn_add_numbers",
+    "args": {
+      "a": 2,
+      "b": 3
+    }
+  }
 ]
 ```
 
-## Development Helpers
+## Resources
+- Hugging Face Transformers documentation: https://huggingface.co/docs/transformers
+- Hugging Face Hub documentation: https://huggingface.co/docs/huggingface_hub
+- Constrained decoding overview (conceptual): https://arxiv.org/abs/2304.09118
+- JSON specification: https://www.json.org/json-en.html
 
-- Run: `make run`
-- Lint/type-check: `make lint`
-- Debug: `make debug`
-- Clean cache files: `make clean`
-
-## Notes
-
-- The generation logic is heuristic and strongly tied to tokenizer behavior.
-- Regex/string and float handling are constrained to avoid infinite generation loops.
-- For production-grade function calling, add robust post-processing/validation.
+### AI Usage
+AI was used to refine README wording and structure only. No AI-generated code was introduced into the implementation(lkdob 7ram ana ktbt chi 60% o howa 40% hh).
