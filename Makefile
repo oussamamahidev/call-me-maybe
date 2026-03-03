@@ -12,9 +12,9 @@ clean:
 
 lint:
 	
-	@uv run mypy . --warn-return-any --warn-unused-ignores \
+	@mypy . --warn-return-any --warn-unused-ignores \
 		--ignore-missing-imports --disallow-untyped-defs \
 		--check-untyped-defs
-	@uv run flake8 .
+	@flake8 .
 
 .PHONY: run install debug clean lint

@@ -3,6 +3,7 @@ import sys
 from typing import List, Any, Dict, Set
 from llm_sdk import Small_LLM_Model
 
+
 def mask_logits(logits: List, allowed_ids: Any) -> Any:
     for i in range(len(logits)):
         if i not in allowed_ids:
@@ -96,7 +97,7 @@ def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
                 text = model.decode(llm_output)
                 for f in functions:
                     if f["name"] in text:
-                        selected_function = f #dict
+                        selected_function = f  # dict
                         break
                 # print(selected_function)
                 param_keys = list(selected_function["parameters"].keys())
@@ -133,7 +134,7 @@ def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
         elif state == "ARG_VALUE":
 
             if current_param_type == "number":
-                seen_decimal = False # kyna . ola la
+                seen_decimal = False  # kyna . ola la
                 max_steps = 16
                 max_digits = 12
                 steps = 0
@@ -147,14 +148,11 @@ def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
 
                     logits = model.get_logits_from_input_ids(input_ids)
                     allowed_ids = set()
-                    import time
-                    time1 = time.time()
                     for token_str, token_id in vocab.items():
-                        if token_str.isdigit(): # add numbers and .
+                        if token_str.isdigit():  # add numbers and .
                             allowed_ids.add(token_id)
                         elif token_str == "." and not seen_decimal:
                             allowed_ids.add(token_id)
-                    # print(time.time() - time1)
                     # add , if it's not the last param lol
                     if param_index < len(param_keys) - 1:
                         for token_str, token_id in vocab.items():
