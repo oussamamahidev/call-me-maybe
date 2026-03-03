@@ -173,6 +173,12 @@ Output (data/output/function_calling_results.json):
 - Constrained decoding overview (conceptual): https://arxiv.org/abs/2304.09118
 - JSON specification: https://www.json.org/json-en.html
 https://www.aidancooper.co.uk/constrained-decoding/
+https://www.youtube.com/watch?v=xpvFinvqRCA&t=536s
+https://www.youtube.com/watch?v=6JGzwI2pNfo
+https://blog.dottxt.ai/coalescence.html?ref=aidancooper.co.uk#orgefede7b
+https://arxiv.org/pdf/1706.03762v7
+https://arxiv.org/pdf/2505.09388
+
 
 ### AI Usage
 AI was used to refine README wording and structure only. No AI-generated code was introduced into the implementation(lkdob 7ram ana ktbt chi 60% o howa 40% hh).

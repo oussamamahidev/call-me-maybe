@@ -154,7 +154,7 @@ def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
                             allowed_ids.add(token_id)
                         elif token_str == "." and not seen_decimal:
                             allowed_ids.add(token_id)
-                    print(time.time() - time1)
+                    # print(time.time() - time1)
                     # add , if it's not the last param lol
                     if param_index < len(param_keys) - 1:
                         for token_str, token_id in vocab.items():
