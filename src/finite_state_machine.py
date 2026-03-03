@@ -1,8 +1,7 @@
 import json
 import sys
-from typing import List, Any
+from typing import List, Any, Dict, Set
 from llm_sdk import Small_LLM_Model
-
 
 def mask_logits(logits: List, allowed_ids: Any) -> Any:
     for i in range(len(logits)):
@@ -13,9 +12,6 @@ def mask_logits(logits: List, allowed_ids: Any) -> Any:
 
 def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
 
-    # -------------------------------------------------
-    # Load vocab
-    # -------------------------------------------------
     try:
         with open(model.get_path_to_vocab_file(), "r") as f:
             vocab = json.load(f)
@@ -25,42 +21,54 @@ def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
 
     id_to_token = {v: k for k, v in vocab.items()}
 
-    # -------------------------------------------------
-    # Load function definitions
-    # -------------------------------------------------
+    allowed_chars: Set = {
+        " ", "_", "-", ".", "*", "+", "?", "|",
+        "[", "]", "(", ")", "{", "}", "^", "$",
+        "\\", '"'
+    }
+    regex_allowed_ids: set[int] = set()
+    non_regex_allowed_ids: set[int] = set()
+    for token_str, token_id in vocab.items():
+        if "\n" in token_str or "\t" in token_str:
+            continue  # no control characters
+
+        if token_str == '"':
+            regex_allowed_ids.add(token_id)
+            non_regex_allowed_ids.add(token_id)
+            continue
+
+        if '"' not in token_str:
+            non_regex_allowed_ids.add(token_id)
+
+        if '"' in token_str:
+            continue
+        if token_str.isalnum() or token_str in allowed_chars:
+            regex_allowed_ids.add(token_id)
+
     try:
         with open("data/input/functions_definition.json") as f:
-            functions = json.load(f)
+            functions: Dict = json.load(f)
     except IOError:
         print("error with the data/input/functions_definition.json file")
         sys.exit()
 
-    function_names = [f["name"] for f in functions]
-    # -------------------------------------------------
-    # FSM STATE
-    # -------------------------------------------------
+    function_names: List[str] = [f["name"] for f in functions]
+    function_names.append('"')
+
     state = "START"
     selected_function: Any = None
     param_keys: list = []
-    param_index = 0
-    current_param_name = None
-    current_param_type = None
-
+    param_index: int = 0
+    current_param_name: Any = None
+    current_param_type: Any = None
     llm_output: list[int] = []
 
-    # -------------------------------------------------
-    # GENERATION LOOP
-    # -------------------------------------------------
     while True:
 
         print(model.decode(llm_output))
         logits = model.get_logits_from_input_ids(input_ids)
         # print(logits)
         allowed_ids = set()
-
-        # =====================================================
-        # STRUCTURAL STATES (we force structure)
-        # =====================================================
 
         if state == "START":
             tokens = model.encode('{\n"fn_name": "')[0].tolist()
@@ -69,28 +77,17 @@ def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
             state = "FN_VALUE"
             continue
 
-        # =====================================================
-        # FUNCTION NAME GENERATION
-        # =====================================================
         elif state == "FN_VALUE":
 
             for token_str, token_id in vocab.items():
-
-                # allow letters belonging to any function name
                 for name in function_names:
                     if token_str in name:
                         allowed_ids.add(token_id)
 
-                # allow closing quote AFTER something written
-                if token_str == '"' and len(model.decode(llm_output)) > 15:
-                    allowed_ids.add(token_id)
-
             logits = mask_logits(logits, allowed_ids)
-            # print(logits)
 
             next_token = max(range(len(logits)), key=lambda i: logits[i])
             token_str = id_to_token[next_token]
-
             input_ids.append(next_token)
             llm_output.append(next_token)
 
@@ -99,35 +96,28 @@ def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
                 text = model.decode(llm_output)
                 for f in functions:
                     if f["name"] in text:
-                        selected_function = f
+                        selected_function = f #dict
                         break
-
+                # print(selected_function)
                 param_keys = list(selected_function["parameters"].keys())
                 state = "ARG_STRUCT_START"
 
             continue
 
-        # =====================================================
-        # FORCE ARGUMENT STRUCTURE
-        # =====================================================
         elif state == "ARG_STRUCT_START":
 
             tokens = model.encode(',\n"arguments": {\n')[0].tolist()
             input_ids.extend(tokens)
             llm_output.extend(tokens)
 
-            param_index = 0
             state = "ARG_KEY"
             continue
 
-        # =====================================================
-        # FORCE PARAM KEY
-        # =====================================================
         elif state == "ARG_KEY":
 
-            if param_index >= len(param_keys):
-                state = "END_STRUCT"
-                continue
+            # if param_index >= len(param_keys):
+            #     state = "END_STRUCT"
+            #     continue
 
             param = param_keys[param_index]
             current_param_name = param
@@ -140,16 +130,10 @@ def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
             state = "ARG_VALUE"
             continue
 
-        # =====================================================
-        # GENERATE PARAM VALUE
-        # =====================================================
         elif state == "ARG_VALUE":
 
-            # -----------------------
-            # NUMBER TYPE
-            # -----------------------
             if current_param_type == "number":
-                seen_decimal = False
+                seen_decimal = False # kyna . ola la
                 max_steps = 16
                 max_digits = 12
                 steps = 0
@@ -163,16 +147,20 @@ def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
 
                     logits = model.get_logits_from_input_ids(input_ids)
                     allowed_ids = set()
+                    import time
+                    time1 = time.time()
                     for token_str, token_id in vocab.items():
-                        if token_str.isdigit():
+                        if token_str.isdigit(): # add numbers and .
                             allowed_ids.add(token_id)
                         elif token_str == "." and not seen_decimal:
                             allowed_ids.add(token_id)
-
+                    print(time.time() - time1)
+                    # add , if it's not the last param lol
                     if param_index < len(param_keys) - 1:
                         for token_str, token_id in vocab.items():
                             if token_str == ",":
                                 allowed_ids.add(token_id)
+                    # or add } if last param looool
                     else:
                         for token_str, token_id in vocab.items():
                             if token_str == "}":
@@ -190,6 +178,8 @@ def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
 
                     if token_str.isdigit():
                         digit_count += 1
+
+                        # avoid multiple leading zeros for the final param
                         if (
                             token_str == "0"
                             and not seen_decimal
@@ -207,15 +197,16 @@ def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
                             if token_str != "0":
                                 nonzero_after_decimal = True
 
+                            # trim long trailing zeros like 16.0000 -> 16
                             if (
                                 digits_after_decimal >= 4
                                 and not nonzero_after_decimal
                             ):
-                                # remove decimal and its trailing zeros
                                 while len(input_ids) > decimal_index:
                                     input_ids.pop()
                                     llm_output.pop()
-                                    digit_count -= 1 if digit_count > 0 else 0
+                                    if digit_count > 0:
+                                        digit_count -= 1
                                 seen_decimal = False
                                 digits_after_decimal = 0
                                 nonzero_after_decimal = False
@@ -230,6 +221,7 @@ def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
                                     state = "END_STRUCT"
                                 break
 
+                        # stell have some params to add
                         if steps >= max_steps or digit_count >= max_digits:
                             if param_index < len(param_keys) - 1:
                                 tokens = model.encode(',\n')[0].tolist()
@@ -282,35 +274,10 @@ def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
                     logits = model.get_logits_from_input_ids(input_ids)
                     allowed_ids = set()
 
-                    for token_str, token_id in vocab.items():
-
-                        # forbid control characters
-                        if "\n" in token_str or "\t" in token_str:
-                            continue
-
-                        # allow closing quote always
-                        if token_str == '"':
-                            allowed_ids.add(token_id)
-                            continue
-
-                        # allow readable tokens that do not contain quotes
-                        if current_param_name == "regex":
-                            if '"' in token_str:
-                                continue
-                            if (
-                                token_str.isalnum()
-                                or (
-                                    token_str in
-                                    [
-                                        " ", "_", "-",
-                                        ".", "*", "+", "?", "|",
-                                        "[", "]", "(", ")", "{",
-                                        "}", "^", "$", "\\"])
-                            ):
-                                allowed_ids.add(token_id)
-                        else:
-                            if '"' not in token_str:
-                                allowed_ids.add(token_id)
+                    if current_param_name == "regex":
+                        allowed_ids = regex_allowed_ids
+                    else:
+                        allowed_ids = non_regex_allowed_ids
 
                     logits = mask_logits(logits, allowed_ids)
                     next_token = max(

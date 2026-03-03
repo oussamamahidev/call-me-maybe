@@ -3,7 +3,7 @@
 # call_me_maybe
 
 ## Description
-This project implements a constrained-decoding function-calling prototype on top of a local Hugging Face causal LLM. It takes natural-language prompts and produces a strict JSON function call with a selected function name and typed arguments. The goal is to reliably generate a machine-readable function invocation without post-hoc parsing hacks.
+This project implements a constrained-decoding function-calling prototype on top of an LLM. It takes natural-language prompts and produces a strict JSON function call with a selected function name and typed arguments.
 
 ## Instructions
 
@@ -46,37 +46,81 @@ python3 -m src.main \
   --output data/output/function_calling_results.json
 ```
 
-Alternative entrypoint:
-
-```bash
-python3 -m src
-```
 
 ## Algorithm Explanation (Constrained Decoding)
 The model does not get to write anything it wants. Instead, it follows a step-by-step map (a finite-state machine) that describes the exact JSON shape of a function call. At each step, the FSM says which tokens are allowed next. The decoder then hides every other token and picks from the allowed ones only. The FSM moves forward based on what was emitted, walking through steps like opening `{`, writing a key, adding `:`, writing a value, and finally closing `}`.
 
 Function names can only come from the known list, and argument keys must match the selected function schema. Argument values are also guided by type: numbers are built from digits (and optional `-` or `.` in the right place), while strings are limited to safe characters plus the closing quote. This keeps the output on track so it stays valid JSON and matches the function definition.
 
+## FSM Detailed 
+The FSM lives in src/finite_state_machine.py and controls output token-by-token. It follows these states in order and loops across parameters as needed.
+
+### State: START
+Writes the JSON prefix for a function call.
+Output: {
+"fn_name": "
+Next: FN_VALUE
+
+### State: FN_VALUE
+Chooses the function name from the allowed list. Tokens are restricted to substrings of known names. The state completes when a closing quote is emitted, and the selected function is detected by decoding the output.
+Next: ARG_STRUCT_START
+
+### State: ARG_STRUCT_START
+Writes the arguments object prefix.
+Output: ,
+"arguments": {
+Next: ARG_KEY
+
+### State: ARG_KEY
+Writes the next argument key for the selected function.
+Output: "<param_name>": 
+Next: ARG_VALUE
+
+### State: ARG_VALUE (number)
+Generates a JSON number with tight constraints.
+- Allowed tokens: digits and a single '.' (decimal point), plus ',' or '}' depending on whether more params remain.
+- Keeps counters for total digits and digits after the decimal.
+- Prevents invalid formatting (for example, multiple leading zeros for the final param).
+- Trims long runs of trailing zeros after a decimal (e.g., 16.0000 -> 16).
+- Stops if max steps or max digits are reached, then advances to the next param or closes the JSON.
+Next: ARG_KEY (more params) or END_STRUCT (last param)
+
+### State: ARG_VALUE (string)
+Generates a JSON string with restricted characters.
+- Always emits an opening quote.
+- Allows a filtered set of readable tokens and always allows the closing quote.
+- For regex params, uses stricter character rules and shorter limits to avoid runaway patterns.
+- Forces a closing quote if max steps or character limits are reached.
+Next: ARG_AFTER_VALUE
+
+### State: ARG_AFTER_VALUE
+Moves to the next parameter or ends the argument object.
+- If more params remain, emits a comma and goes back to ARG_KEY.
+- If no params remain, goes to END_STRUCT.
+
+### State: END_STRUCT
+Closes the JSON object (and the nested arguments object if needed).
+Output: \n}\n or \n}\n}\n
+
 ## Design Decisions
-- Use a lightweight local model (Qwen/Qwen3-0.6B) to keep inference fast and offline-friendly.
-- Encode the output format as a FSM to enforce a strict JSON grammar at token level.
-- Separate function definitions and test prompts into JSON files for repeatable batch evaluation.
-- Keep the schema minimal (number, string) to simplify reliable constrained decoding.
+- Picked a small local model (Qwen/Qwen3-0.6B) so it runs fast and works offline.
+- Used a finite-state machine so the output always follows valid JSON structure.
+- Kept function definitions and test prompts in separate JSON files to make testing easy to repeat.
+- Limited the schema to just number and string to keep decoding stable and predictable.
 
 ## Performance Analysis
-- Accuracy: High when prompts align with available functions; constrained decoding prevents malformed JSON and invalid keys.
-- Speed: Token masking adds overhead per step but remains acceptable for small models and short outputs.
-- Reliability: The FSM prevents format drift and truncation errors, but relies on tokenizer-specific token boundaries and can be sensitive to model vocabulary.
+- Accuracy: Strong when the prompt matches a known function; the FSM blocks bad JSON or wrong keys.
+- Speed: Masking tokens adds work each step, but it is still fine for small models and short outputs.
+- Reliability: The FSM keeps the structure correct, though it depends on tokenizer details and the model's vocab.
 
 ## Challenges Faced
-- Tokenizer alignment: Some tokens do not map cleanly to JSON fragments, requiring careful masking choices.
-- Numeric and string handling: Avoiding infinite loops and malformed numbers required explicit state transitions.
-- Schema enforcement: Ensuring keys and values match the selected function schema demanded strict state gating.
+- Numbers and strings: Preventing infinite loops and bad number formats required extra rules in the FSM.
+- Schema enforcement: Keys and values had to be tightly restricted to match the selected function.
 
 ## Testing Strategy
-- Run the batch test file in data/input/function_calling_tests.json and verify outputs match the expected schema.
-- Inspect JSON validity and check that argument types conform to the function definitions.
-- Re-run after any tokenizer or model change to validate FSM transitions.
+- Run the batch tests in data/input/function_calling_tests.json and confirm the output shape is correct.
+- Check that the JSON is valid and that argument types match the function definitions.
+- Re-run tests after changing the model or tokenizer to make sure the FSM still behaves.
 
 ## Example Usage
 
@@ -84,8 +128,7 @@ Input (data/input/function_calling_tests.json):
 
 ```json
 [
-  { "prompt": "What is the sum of 2 and 3?" },
-  { "prompt": "Greet shrek" }
+  { "prompt": "What is the sum of 2 and 3?" }
 ]
 ```
 
@@ -106,9 +149,7 @@ Function definitions (data/input/functions_definition.json):
 Run:
 
 ```bash
-python3 -m src.main \
-  --input data/input/function_calling_tests.json \
-  --output data/output/function_calling_results.json
+python3 -m src.main
 ```
 
 Output (data/output/function_calling_results.json):
@@ -131,6 +172,7 @@ Output (data/output/function_calling_results.json):
 - Hugging Face Hub documentation: https://huggingface.co/docs/huggingface_hub
 - Constrained decoding overview (conceptual): https://arxiv.org/abs/2304.09118
 - JSON specification: https://www.json.org/json-en.html
+https://www.aidancooper.co.uk/constrained-decoding/
 
 ### AI Usage
 AI was used to refine README wording and structure only. No AI-generated code was introduced into the implementation(lkdob 7ram ana ktbt chi 60% o howa 40% hh).
