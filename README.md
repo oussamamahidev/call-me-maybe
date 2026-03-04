@@ -52,6 +52,12 @@ The model does not get to write anything it wants. Instead, it follows a step-by
 
 Function names can only come from the known list, and argument keys must match the selected function schema. Argument values are also guided by type: numbers are built from digits (and optional `-` or `.` in the right place), while strings are limited to safe characters plus the closing quote. This keeps the output on track so it stays valid JSON and matches the function definition.
 
+## Core Concepts (Short Definitions)
+- Tokenizer: turns raw text into tokens (ids) that the model can process, and converts ids back to text.
+- Encoder: transforms input tokens into internal representations (contextual embeddings).
+- Decoder: generates output tokens step-by-step, conditioned on previous tokens (and encoder output in encoder-decoder models).
+- Transformer: the neural architecture behind the model, using self-attention and feed-forward layers to model sequences efficiently.
+
 ## FSM Detailed 
 The FSM lives in src/finite_state_machine.py and controls output token-by-token. It follows these states in order and loops across parameters as needed.
 
@@ -168,16 +174,21 @@ Output (data/output/function_calling_results.json):
 ```
 
 ## Resources
-- Hugging Face Transformers documentation: https://huggingface.co/docs/transformers
-- Hugging Face Hub documentation: https://huggingface.co/docs/huggingface_hub
-- Constrained decoding overview (conceptual): https://arxiv.org/abs/2304.09118
-- JSON specification: https://www.json.org/json-en.html
+
+
+
+
 https://www.aidancooper.co.uk/constrained-decoding/
-https://www.youtube.com/watch?v=xpvFinvqRCA&t=536s
-https://www.youtube.com/watch?v=6JGzwI2pNfo
-https://blog.dottxt.ai/coalescence.html?ref=aidancooper.co.uk#orgefede7b
+
 https://arxiv.org/pdf/1706.03762v7
+
 https://arxiv.org/pdf/2505.09388
+
+https://www.youtube.com/watch?v=xpvFinvqRCA&t=536s
+
+https://www.youtube.com/watch?v=6JGzwI2pNfo
+
+https://blog.dottxt.ai/coalescence.html?ref=aidancooper.co.uk#orgefede7b
 
 
 ### AI Usage

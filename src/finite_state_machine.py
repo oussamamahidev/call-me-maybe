@@ -11,7 +11,13 @@ def mask_logits(logits: List, allowed_ids: Any) -> Any:
     return logits
 
 
-def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
+def main_loop(
+    model: Small_LLM_Model,
+    input_ids: list[int],
+    *,
+    max_total_steps: int = 512,
+    debug: bool = False
+) -> list[int]:
 
     try:
         with open(model.get_path_to_vocab_file(), "r") as f:
@@ -27,8 +33,8 @@ def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
         "[", "]", "(", ")", "{", "}", "^", "$",
         "\\", '"'
     }
-    regex_allowed_ids: set[int] = set()
-    non_regex_allowed_ids: set[int] = set()
+    regex_allowed_ids: Set[int] = set()
+    non_regex_allowed_ids: Set[int] = set()
     for token_str, token_id in vocab.items():
         if "\n" in token_str or "\t" in token_str:
             continue  # no control characters
@@ -60,16 +66,20 @@ def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
     selected_function: Any = None
     param_keys: list = []
     param_index: int = 0
-    current_param_name: Any = None
     current_param_type: Any = None
     llm_output: list[int] = []
 
+    total_steps = 0
     while True:
 
-        print(model.decode(llm_output))
+        if debug:
+            print(model.decode(llm_output))
+        total_steps += 1
+        if total_steps >= max_total_steps:
+            state = "END_STRUCT"
         logits = model.get_logits_from_input_ids(input_ids)
-        # print(logits)
         allowed_ids = set()
+        print(model.decode(llm_output))
 
         if state == "START":
             tokens = model.encode('{\n"fn_name": "')[0].tolist()
@@ -116,12 +126,7 @@ def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
 
         elif state == "ARG_KEY":
 
-            # if param_index >= len(param_keys):
-            #     state = "END_STRUCT"
-            #     continue
-
             param = param_keys[param_index]
-            current_param_name = param
             current_param_type = selected_function["parameters"][param]["type"]
 
             tokens = model.encode(f'"{param}": ')[0].tolist()
@@ -134,13 +139,13 @@ def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
         elif state == "ARG_VALUE":
 
             if current_param_type == "number":
-                seen_decimal = False  # kyna . ola la
-                max_steps = 16
-                max_digits = 12
-                steps = 0
-                digit_count = 0
-                digits_after_decimal = 0
-                nonzero_after_decimal = False
+                seen_decimal: bool = False  # kyna . ola la
+                max_steps: int = 16
+                max_digits: int = 12
+                steps: int = 0
+                digit_count: int = 0
+                digits_after_decimal: int = 0
+                nonzero_after_decimal: bool = False
                 decimal_index: Any = None
 
                 while True:
@@ -195,7 +200,7 @@ def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
                             if token_str != "0":
                                 nonzero_after_decimal = True
 
-                            # trim long trailing zeros like 16.0000 -> 16
+                            # trim long trailing zeros like 16.0000 to 16
                             if (
                                 digits_after_decimal >= 4
                                 and not nonzero_after_decimal
@@ -250,9 +255,6 @@ def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
 
                 continue
 
-            # -----------------------
-            # STRING TYPE
-            # -----------------------
             elif current_param_type == "string":
 
                 # force opening quote
@@ -260,22 +262,18 @@ def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
                 input_ids.extend(tokens)
                 llm_output.extend(tokens)
 
-                # now allow content characters
-                # tighter cap for regex strings to avoid runaway patterns
-                max_string_steps = 20 if current_param_name == "regex" else 128
-                char_limit = 32 if current_param_name == "regex" else None
+                max_string_steps = 12
+                char_limit = None
+
                 char_count = 0
                 string_steps = 0
+
                 while True:
 
                     string_steps += 1
                     logits = model.get_logits_from_input_ids(input_ids)
-                    allowed_ids = set()
 
-                    if current_param_name == "regex":
-                        allowed_ids = regex_allowed_ids
-                    else:
-                        allowed_ids = non_regex_allowed_ids
+                    allowed_ids = set(non_regex_allowed_ids)
 
                     logits = mask_logits(logits, allowed_ids)
                     next_token = max(
@@ -308,9 +306,6 @@ def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
                 state = "ARG_AFTER_VALUE"
                 continue
 
-        # =====================================================
-        # COMMA OR NEXT PARAM
-        # =====================================================
         elif state == "ARG_AFTER_VALUE":
 
             param_index += 1
@@ -325,9 +320,6 @@ def main_loop(model: Small_LLM_Model, input_ids: list[int]) -> list[int]:
 
             continue
 
-        # =====================================================
-        # CLOSE JSON
-        # =====================================================
         elif state == "END_STRUCT":
             decoded = model.decode(llm_output).rstrip()
             closing_text = '\n}\n' if decoded.endswith('}') else '\n}\n}\n'
