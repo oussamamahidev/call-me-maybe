@@ -14,9 +14,7 @@ def mask_logits(logits: List, allowed_ids: Any) -> Any:
 def main_loop(
     model: Small_LLM_Model,
     input_ids: list[int],
-    *,
-    max_total_steps: int = 512,
-    debug: bool = False
+    prompt: str
 ) -> list[int]:
 
     try:
@@ -28,29 +26,26 @@ def main_loop(
 
     id_to_token = {v: k for k, v in vocab.items()}
 
-    allowed_chars: Set = {
-        " ", "_", "-", ".", "*", "+", "?", "|",
-        "[", "]", "(", ")", "{", "}", "^", "$",
-        "\\", '"'
-    }
-    regex_allowed_ids: Set[int] = set()
-    non_regex_allowed_ids: Set[int] = set()
+    string_allowed_ids: List[int] = list()
     for token_str, token_id in vocab.items():
         if "\n" in token_str or "\t" in token_str:
             continue  # no control characters
+        elif token_str in prompt:
+            string_allowed_ids.append(token_id)
 
-        if token_str == '"':
-            regex_allowed_ids.add(token_id)
-            non_regex_allowed_ids.add(token_id)
-            continue
-
-        if '"' not in token_str:
-            non_regex_allowed_ids.add(token_id)
-
-        if '"' in token_str:
-            continue
-        if token_str.isalnum() or token_str in allowed_chars:
-            regex_allowed_ids.add(token_id)
+    string_allowed_ids.extend(input_ids)
+    allowed_cars = [
+        "*", "[", "]", "{","}", "(",")", "|","a", "b", "c", "d",
+        "e", "f", "g", "h", "i", "j", "k", "l", "m","n", "o", "p",
+        "q", "r", "s", "t", "u", "v", "w", "x", "y", "z","A", "B",
+        "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M","N",
+        "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"
+    ]
+    for car in allowed_cars:
+        string_allowed_ids.extend(model.encode(car)[0].tolist())
+    print(len(string_allowed_ids))
+    string_allowed_ids = list(set(string_allowed_ids))
+    print(len(string_allowed_ids))
 
     try:
         with open("data/input/functions_definition.json") as f:
@@ -69,14 +64,8 @@ def main_loop(
     current_param_type: Any = None
     llm_output: list[int] = []
 
-    total_steps = 0
     while True:
 
-        if debug:
-            print(model.decode(llm_output))
-        total_steps += 1
-        if total_steps >= max_total_steps:
-            state = "END_STRUCT"
         logits = model.get_logits_from_input_ids(input_ids)
         allowed_ids = set()
         print(model.decode(llm_output))
@@ -158,6 +147,7 @@ def main_loop(
                             allowed_ids.add(token_id)
                         elif token_str == "." and not seen_decimal:
                             allowed_ids.add(token_id)
+                            seen_decimal = True
                     # add , if it's not the last param lol
                     if param_index < len(param_keys) - 1:
                         for token_str, token_id in vocab.items():
@@ -189,6 +179,7 @@ def main_loop(
                             and digit_count >= 2
                             and param_index == len(param_keys) - 1
                         ):
+                            # print("delete 0")
                             input_ids.pop()
                             llm_output.pop()
                             digit_count -= 1
@@ -262,10 +253,6 @@ def main_loop(
                 input_ids.extend(tokens)
                 llm_output.extend(tokens)
 
-                max_string_steps = 12
-                char_limit = None
-
-                char_count = 0
                 string_steps = 0
 
                 while True:
@@ -273,35 +260,26 @@ def main_loop(
                     string_steps += 1
                     logits = model.get_logits_from_input_ids(input_ids)
 
-                    allowed_ids = set(non_regex_allowed_ids)
-
-                    logits = mask_logits(logits, allowed_ids)
-                    next_token = max(
+                    logits = mask_logits(logits, string_allowed_ids)
+                    next_token: int = max(
                         range(len(logits)),
                         key=lambda i: logits[i]
                         )
                     token_str = id_to_token[next_token]
+                    # print(token_str)
 
                     input_ids.append(next_token)
                     llm_output.append(next_token)
 
                     if token_str == '"':
                         break
-
-                    if char_limit is not None:
-                        char_count += len(token_str)
-                        if char_count >= char_limit:
-                            close_tokens = model.encode('"')[0].tolist()
-                            input_ids.extend(close_tokens)
-                            llm_output.extend(close_tokens)
-                            break
-
-                    if string_steps >= max_string_steps:
-                        # force close to avoid infinite loops
-                        close_tokens = model.encode('"')[0].tolist()
-                        input_ids.extend(close_tokens)
-                        llm_output.extend(close_tokens)
+                    if '"' in token_str:
+                        llm_output.pop()
+                        input_ids.pop()
+                        llm_output.extend(model.encode('"')[0].tolist())
+                        input_ids.extend(model.encode('"')[0].tolist())
                         break
+
 
                 state = "ARG_AFTER_VALUE"
                 continue

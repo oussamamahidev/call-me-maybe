@@ -77,7 +77,7 @@ def main() -> None:
         for test in testes:
             print(test["prompt"])
             input_ids = model.encode(prompt(test["prompt"]))[0].tolist()
-            output_ids = main_loop(model, input_ids, max_total_steps=512)
+            output_ids = main_loop(model, input_ids, prompt(test["prompt"]))
             llm_output = json.loads(model.decode(output_ids))
             final_output_list.append(
                 {
