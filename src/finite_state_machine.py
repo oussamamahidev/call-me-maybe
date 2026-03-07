@@ -1,6 +1,5 @@
 import json
 import sys
-import re
 from typing import List, Any, Dict, Set
 from llm_sdk import Small_LLM_Model
 
@@ -14,9 +13,9 @@ def mask_logits(logits: List, allowed_ids: Any) -> Any:
 
 def main_loop(
     model: Small_LLM_Model,
-    input_ids: list[int],
+    input_ids: List[int],
     prompt: str
-) -> list[int]:
+) -> List[int]:
 
     try:
         with open(model.get_path_to_vocab_file(), "r") as f:
@@ -36,17 +35,15 @@ def main_loop(
 
     string_allowed_ids.extend(input_ids)
     allowed_cars = [
-        "*", "[", "]", "{","}", "(",")", "|","a", "b", "c", "d",
-        "e", "f", "g", "h", "i", "j", "k", "l", "m","n", "o", "p",
-        "q", "r", "s", "t", "u", "v", "w", "x", "y", "z","A", "B",
-        "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M","N",
+        "*", "[", "]", "{", "}", "(", ")", "|", "a", "b", "c", "d",
+        "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p",
+        "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "A", "B",
+        "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N",
         "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"
     ]
     for car in allowed_cars:
         string_allowed_ids.extend(model.encode(car)[0].tolist())
-    print(len(string_allowed_ids))
     string_allowed_ids = list(set(string_allowed_ids))
-    print(len(string_allowed_ids))
 
     try:
         with open("data/input/functions_definition.json") as f:
@@ -58,13 +55,19 @@ def main_loop(
     function_names: List[str] = [f["name"] for f in functions]
     function_names.append('"')
 
-    state = "START"
+    state: str = "START"
     selected_function: Any = None
     param_keys: list = []
     param_index: int = 0
+    arg_flage: bool = False
     current_param_type: Any = None
-    current_param_name: str = ""
     llm_output: list[int] = []
+    allowed_functionname_ids: Set = set()
+
+    for token_str, token_id in vocab.items():
+        for name in function_names:
+            if token_str in name:
+                allowed_functionname_ids.add(token_id)
 
     while True:
 
@@ -81,12 +84,7 @@ def main_loop(
 
         elif state == "FN_VALUE":
 
-            for token_str, token_id in vocab.items():
-                for name in function_names:
-                    if token_str in name:
-                        allowed_ids.add(token_id)
-
-            logits = mask_logits(logits, allowed_ids)
+            logits = mask_logits(logits, allowed_functionname_ids)
 
             next_token = max(range(len(logits)), key=lambda i: logits[i])
             token_str = id_to_token[next_token]
@@ -102,26 +100,21 @@ def main_loop(
                         break
                 # print(selected_function)
                 param_keys = list(selected_function["parameters"].keys())
-                state = "ARG_STRUCT_START"
+                state = "ARG_KEY"
 
-            continue
-
-        elif state == "ARG_STRUCT_START":
-
-            tokens = model.encode(',\n"arguments": {\n')[0].tolist()
-            input_ids.extend(tokens)
-            llm_output.extend(tokens)
-
-            state = "ARG_KEY"
             continue
 
         elif state == "ARG_KEY":
+            if not arg_flage:
+                tokens = model.encode(',\n"arguments": {\n')[0].tolist()
+                input_ids.extend(tokens)
+                llm_output.extend(tokens)
+                arg_flage = True
 
-            param = param_keys[param_index]
-            current_param_name = param
-            current_param_type = selected_function["parameters"][param]["type"]
+            param: str = param_keys[param_index]
+            current_param_type: str = selected_function["parameters"][param]["type"]
 
-            tokens = model.encode(f'"{param}": ')[0].tolist()
+            tokens: List[int] = model.encode(f'"{param}": ')[0].tolist()
             input_ids.extend(tokens)
             llm_output.extend(tokens)
 
@@ -132,12 +125,13 @@ def main_loop(
 
             if current_param_type == "number":
                 seen_decimal: bool = False  # kyna . ola la
-                max_digits: int = 12
+                max_digits: int = 8
                 digit_count: int = 0
                 digits_after_decimal: int = 0
                 nonzero_after_decimal: bool = False
                 decimal_index: Any = None
 
+                # 16.00000 -> 16
                 def normalize_fractional_tail() -> None:
                     nonlocal seen_decimal
                     nonlocal digits_after_decimal
@@ -187,17 +181,6 @@ def main_loop(
                     for car_id in allowed_digits:
                         allowed_ids.add(model.encode(car_id)[0].tolist()[0])
 
-                    can_close_number = not (seen_decimal and digits_after_decimal == 0)
-                    # add , if it's not the last param lol
-                    if can_close_number and param_index < len(param_keys) - 1:
-
-                        allowed_ids.add(model.encode(",")[0].tolist()[0])
-                        
-                    # or add } if last param looool
-                    elif can_close_number:
-
-                        allowed_ids.add(model.encode("}")[0].tolist()[0])
-
                     logits = mask_logits(logits, allowed_ids)
                     next_token = max(
                         range(len(logits)),
@@ -222,32 +205,6 @@ def main_loop(
                             digits_after_decimal += 1
                             if token_str != "0":
                                 nonzero_after_decimal = True
-
-                            # trim long trailing zeros like 16.0000 to 16
-                            if (
-                                digits_after_decimal >= 4
-                                and not nonzero_after_decimal
-                                and decimal_index is not None
-                            ):
-                                while len(input_ids) > decimal_index:
-                                    popped_token = id_to_token[input_ids[-1]]
-                                    input_ids.pop()
-                                    llm_output.pop()
-                                    if popped_token.isdigit() and digit_count > 0:
-                                        digit_count -= 1
-                                seen_decimal = False
-                                digits_after_decimal = 0
-                                nonzero_after_decimal = False
-
-                                if param_index < len(param_keys) - 1:
-                                    tokens = model.encode(',\n')[0].tolist()
-                                    input_ids.extend(tokens)
-                                    llm_output.extend(tokens)
-                                    param_index += 1
-                                    state = "ARG_KEY"
-                                else:
-                                    state = "END_STRUCT"
-                                break
 
                         # stell have some params to add
                         if digit_count >= max_digits:
@@ -299,21 +256,14 @@ def main_loop(
                 input_ids.extend(tokens)
                 llm_output.extend(tokens)
 
-                string_steps = 0
-
                 while True:
-
-                    string_steps += 1
                     logits = model.get_logits_from_input_ids(input_ids)
-
                     logits = mask_logits(logits, string_allowed_ids)
                     next_token: int = max(
                         range(len(logits)),
                         key=lambda i: logits[i]
                         )
                     token_str = id_to_token[next_token]
-                    # print(token_str)
-
                     input_ids.append(next_token)
                     llm_output.append(next_token)
 
@@ -325,7 +275,9 @@ def main_loop(
                         llm_output.extend(model.encode('"')[0].tolist())
                         input_ids.extend(model.encode('"')[0].tolist())
                         break
-
+                    # print(param_keys, token_str)
+                    if param_keys[param_index] == "regex" and token_str == "]":
+                        break
 
                 state = "ARG_AFTER_VALUE"
                 continue
@@ -350,7 +302,6 @@ def main_loop(
             tokens = model.encode(closing_text)[0].tolist()
             input_ids.extend(tokens)
             llm_output.extend(tokens)
-            print("last:\n\n", model.decode(llm_output))
             break
 
     return llm_output

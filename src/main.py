@@ -47,7 +47,6 @@ def prompt(test: str) -> str:
 
 def main() -> None:
     model = Small_LLM_Model()
-    # print(model.get_path_to_vocab_file())
 
     try:
         if "--input" in sys.argv:
@@ -68,8 +67,8 @@ def main() -> None:
     try:
         with open(tests_file, "r") as f:
             testes = json.load(f)
-    except Exception:
-        print("missing testing file bruu ;)")
+    except Exception as e:
+        print(f"error with the testing file: {e}")
         sys.exit()
 
     final_output_list: List[Dict] = []
