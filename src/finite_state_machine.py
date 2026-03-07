@@ -5,6 +5,10 @@ from llm_sdk import Small_LLM_Model
 
 
 def mask_logits(logits: List, allowed_ids: Any) -> Any:
+    """
+    Mask logits so that only specific token IDs remain selectable.
+    """
+    allowed_ids = set(allowed_ids)
     for i in range(len(logits)):
         if i not in allowed_ids:
             logits[i] = -float("inf")
@@ -17,6 +21,21 @@ def main_loop(
     prompt: str
 ) -> List[int]:
 
+    """
+    Generate a structured JSON function call using constrained decoding.
+
+    The function runs a loop that generates tokens step-by-step while
+    restricting the allowed tokens to ensure the output follows the
+    required JSON format for a function call.
+
+    Args:
+        model: The language model used for token generation.
+        input_ids: Token IDs of the input prompt.
+        prompt: The original prompt text.
+
+    Returns:
+        List[int]: Token IDs of the generated JSON output.
+    """
     try:
         with open(model.get_path_to_vocab_file(), "r") as f:
             vocab = json.load(f)
@@ -39,7 +58,8 @@ def main_loop(
         "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p",
         "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "A", "B",
         "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N",
-        "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"
+        "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
+        '"'
     ]
     for car in allowed_cars:
         string_allowed_ids.extend(model.encode(car)[0].tolist())
@@ -60,7 +80,7 @@ def main_loop(
     param_keys: list = []
     param_index: int = 0
     arg_flage: bool = False
-    current_param_type: Any = None
+    current_param_type: str | None = None
     llm_output: list[int] = []
     allowed_functionname_ids: Set = set()
 
@@ -72,7 +92,7 @@ def main_loop(
     while True:
 
         logits = model.get_logits_from_input_ids(input_ids)
-        allowed_ids = set()
+        allowed_ids: Set = set()
         print(model.decode(llm_output))
 
         if state == "START":
@@ -86,7 +106,9 @@ def main_loop(
 
             logits = mask_logits(logits, allowed_functionname_ids)
 
-            next_token = max(range(len(logits)), key=lambda i: logits[i])
+            next_token: int = max(
+                range(len(logits)),
+                key=lambda i: logits[i])
             token_str = id_to_token[next_token]
             input_ids.append(next_token)
             llm_output.append(next_token)
@@ -112,9 +134,9 @@ def main_loop(
                 arg_flage = True
 
             param: str = param_keys[param_index]
-            current_param_type: str = selected_function["parameters"][param]["type"]
+            current_param_type = selected_function["parameters"][param]["type"]
 
-            tokens: List[int] = model.encode(f'"{param}": ')[0].tolist()
+            tokens = model.encode(f'"{param}": ')[0].tolist()
             input_ids.extend(tokens)
             llm_output.extend(tokens)
 
@@ -133,6 +155,7 @@ def main_loop(
 
                 # 16.00000 -> 16
                 def normalize_fractional_tail() -> None:
+                    """Trim trailing zeros from a generated decimal number"""
                     nonlocal seen_decimal
                     nonlocal digits_after_decimal
                     nonlocal nonzero_after_decimal
@@ -259,7 +282,7 @@ def main_loop(
                 while True:
                     logits = model.get_logits_from_input_ids(input_ids)
                     logits = mask_logits(logits, string_allowed_ids)
-                    next_token: int = max(
+                    next_token = max(
                         range(len(logits)),
                         key=lambda i: logits[i]
                         )
@@ -277,6 +300,8 @@ def main_loop(
                         break
                     # print(param_keys, token_str)
                     if param_keys[param_index] == "regex" and token_str == "]":
+                        llm_output.extend(model.encode('"')[0].tolist())
+                        input_ids.extend(model.encode('"')[0].tolist())
                         break
 
                 state = "ARG_AFTER_VALUE"

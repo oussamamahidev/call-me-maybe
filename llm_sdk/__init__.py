@@ -1,9 +1,11 @@
 # ABOUTME: LLM SDK for local model inference using Hugging Face transformers.
-# ABOUTME: Provides Small_LLM_Model class for loading and running
-# causal language models.
+# ABOUTME: Provides Small_LLM_Model class for
+#           loading and running causal language models.
+
+from typing import Any
+
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers import PreTrainedTokenizer, PreTrainedModel, logging
+from transformers import AutoModelForCausalLM, AutoTokenizer, logging
 from huggingface_hub import hf_hub_download
 
 
@@ -11,8 +13,8 @@ logging.set_verbosity_error()  # keep the console clean
 
 
 class Small_LLM_Model:
-    """Utility class wrapping a lightweight Hugging Face causal-LM
-    for fast, low-memory experimentation.
+    """Utility class wrapping a lightweight Hugging Face causal-LM for fast,
+    low-memory experimentation.
 
     Parameters
     ----------
@@ -23,9 +25,10 @@ class Small_LLM_Model:
         when available on macOS,
         ``cuda`` when available, otherwise we fall back to ``cpu``.
     dtype: torch.dtype | None, default=None
-        Numerical precision. When using a GPU or MPS we default to ``float16``
-        to keep memory
-        usage reasonable; on CPU we keep ``float32`` for maximum compatibility.
+        Numerical precision. When using a GPU or MPS we default to
+        ``float16`` to keep memory
+        usage reasonable; on CPU we keep ``float32`` for maximum
+        compatibility.
     """
 
     def __init__(
@@ -52,18 +55,20 @@ class Small_LLM_Model:
             if self._device in ["cuda", "mps"]:
                 dtype = torch.float16
             else:
-                dtype = torch.float32
+                torch.float32
+
         self._dtype = dtype
 
-        # --- load tokenizer & model ---------------------------------------
-        self._tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
+        # --- load tokenizer & model -----------------------------
+        self._tokenizer: Any = AutoTokenizer.from_pretrained(
             model_name, trust_remote_code=trust_remote_code
         )
         if self._tokenizer.pad_token_id is None:
             # ensure we have a pad token to keep batch helpers happy
             self._tokenizer.pad_token_id = self._tokenizer.eos_token_id
 
-        self._model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
+        self._model: Any
+        self._model = AutoModelForCausalLM.from_pretrained(
             model_name,
             torch_dtype=self._dtype,
             device_map="auto" if self._device == "cuda" else None,
@@ -74,11 +79,12 @@ class Small_LLM_Model:
 
         # switch to inference-only mode
         for p in self._model.parameters():
+
             p.requires_grad = False
 
     def encode(self, text: str) -> torch.Tensor:
-        """Tokenise *text* and return a 2-D ``input_ids`` tensor on the
-        target device."""
+        """Tokenise *text* and return a 2-D ``input_ids``
+        tensor on the target device."""
         ids = self._tokenizer.encode(text, add_special_tokens=False)
         return torch.tensor([ids], device=self._device, dtype=torch.long)
 
@@ -86,7 +92,7 @@ class Small_LLM_Model:
         """Inverse of :py:meth:`encode`. Removes special tokens."""
         if isinstance(ids, torch.Tensor):
             ids = ids.tolist()
-        return self._tokenizer.decode(ids, skip_special_tokens=True)
+        return str(self._tokenizer.decode(ids, skip_special_tokens=True))
 
     def get_logits_from_input_ids(self, input_ids: list[int]) -> list[float]:
         """
@@ -94,17 +100,20 @@ class Small_LLM_Model:
         for the next token.
         """
         input_tensor = torch.tensor(
-            [input_ids], device=self._device, dtype=torch.long)
+            [input_ids], device=self._device,
+            dtype=torch.long
+            )
         with torch.no_grad():
             out = self._model(input_ids=input_tensor)
-        # Get logits for the last token in the sequence for the
-        # batch (batch size 1)
+        # Get logits for the last token in the sequence for
+        # the batch (batch size 1)
         logits = out.logits[0, -1].tolist()
         return [float(x) for x in logits]
 
     def get_path_to_vocab_file(self) -> str:
         vocab_file_name = self._tokenizer.vocab_files_names.get(
-            'vocab_file', "vocab.json")
+            'vocab_file',
+            "vocab.json")
         vocab_path = hf_hub_download(
             repo_id=self._model_name,
             filename=vocab_file_name
@@ -113,7 +122,8 @@ class Small_LLM_Model:
 
     def get_path_to_merges_file(self) -> str:
         merges_file_name = self._tokenizer.vocab_files_names.get(
-            'merges_file', "merges.txt")
+            'merges_file',
+            "merges.txt")
         merges_path = hf_hub_download(
             repo_id=self._model_name,
             filename=merges_file_name
@@ -122,7 +132,8 @@ class Small_LLM_Model:
 
     def get_path_to_tokenizer_file(self) -> str:
         tokenizer_file_name = self._tokenizer.vocab_files_names.get(
-            'tokenizer_file', "tokenizer.json")
+            'tokenizer_file',
+            "tokenizer.json")
         tokenizer_path = hf_hub_download(
             repo_id=self._model_name,
             filename=tokenizer_file_name

@@ -7,6 +7,9 @@ from typing import Dict, List
 
 
 def prompt(test: str) -> str:
+    """
+    Build the prompt sent to the language model for function calling.
+    """
     try:
         with open("data/input/functions_definition.json", "r") as f:
             functions = json.load(f)
@@ -46,6 +49,9 @@ def prompt(test: str) -> str:
 
 
 def main() -> None:
+    """
+    Run the function-calling evaluation pipeline.
+    """
     model = Small_LLM_Model()
 
     try:
