@@ -188,6 +188,10 @@ https://www.youtube.com/watch?v=xpvFinvqRCA&t=536s
 
 https://www.youtube.com/watch?v=6JGzwI2pNfo
 
+https://www.youtube.com/watch?v=KJtZARuO3JY
+
+https://www.youtube.com/watch?v=zduSFxRajkE
+
 https://blog.dottxt.ai/coalescence.html?ref=aidancooper.co.uk#orgefede7b
 
 
