@@ -194,6 +194,8 @@ https://www.youtube.com/watch?v=zduSFxRajkE
 
 https://blog.dottxt.ai/coalescence.html?ref=aidancooper.co.uk#orgefede7b
 
+https://www.youtube.com/playlist?list=PLUfbC589u-FSwnqsvTHXVcgmLg8UnbIy3
+
 
 ### AI Usage
 AI was used to refine README wording and structure only. No AI-generated code was introduced into the implementation(lkdob 7ram ana ktbt chi 60% o howa 40% hh).
