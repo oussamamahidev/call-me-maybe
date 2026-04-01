@@ -4,6 +4,8 @@ run:
 install:
 	uv pip install torch transformers mypy flake8
 
+
+
 debug:
 	uv run python -m pdb src/main.py
 
