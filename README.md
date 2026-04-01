@@ -192,6 +192,8 @@ https://www.youtube.com/watch?v=KJtZARuO3JY
 
 https://www.youtube.com/watch?v=zduSFxRajkE
 
+https://jalammar.github.io/illustrated-transformer/
+
 https://blog.dottxt.ai/coalescence.html?ref=aidancooper.co.uk#orgefede7b
 
 https://www.youtube.com/playlist?list=PLUfbC589u-FSwnqsvTHXVcgmLg8UnbIy3
