@@ -177,6 +177,8 @@ Output (data/output/function_calling_results.json):
 
 https://jalammar.github.io/illustrated-bert/
 
+https://jalammar.github.io/illustrated-gpt2/
+
 https://bbycroft.net/llm
 
 https://www.aidancooper.co.uk/constrained-decoding/
