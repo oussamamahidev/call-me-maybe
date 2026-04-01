@@ -175,6 +175,7 @@ Output (data/output/function_calling_results.json):
 
 ## Resources
 
+https://jalammar.github.io/illustrated-bert/
 
 https://bbycroft.net/llm
 
