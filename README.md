@@ -176,7 +176,7 @@ Output (data/output/function_calling_results.json):
 ## Resources
 
 
-
+https://bbycroft.net/llm
 
 https://www.aidancooper.co.uk/constrained-decoding/
 
