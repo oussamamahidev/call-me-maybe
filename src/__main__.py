@@ -1,151 +1,308 @@
 import argparse
-import os
-from llm_sdk import Small_LLM_Model
-from src.json_loader import (
-    load_functions_definition_from_json,
-    load_prompts_from_json,
-)
 import json
+import os
 import time
-from src.constrained_decoding import build_system_prompt, load_vocabulary, build_json_valid_ids, get_best_valid_ids,extract_json_from_text
-def parse_args():
+from typing import Any, Dict, List, Optional
+
+from llm_sdk.llm_sdk import Small_LLM_Model
+
+from src.constrained_decoding import (
+    build_json_valid_ids,
+    build_system_prompt,
+    extract_complete_json,
+    get_best_valid_token,
+    load_vocabulary,
+    validate_function_call,
+)
+from src.json_loader import (
+    load_function_definition,
+    load_prompts,
+)
+
+
+def parse_args() -> argparse.Namespace:
+    """
+    Parse command-line arguments.
+
+    Returns:
+        argparse.Namespace: Parsed command-line arguments.
+    """
     parser = argparse.ArgumentParser(
-        description="Translate natural language prompts into function calls"
+        description=(
+            "Translate natural language prompts into "
+            "function calls using constrained decoding."
+        )
     )
 
     parser.add_argument(
         "--input",
         type=str,
-        default="data/input/function_calling_tests.json",
-        help="Path to the input JSON file containing prompts.",
+        default=(
+            "data/input/"
+            "function_calling_tests.json"
+        ),
+        help="Path to the JSON file containing user prompts.",
     )
 
     parser.add_argument(
-        "--function_definitions",
+        "--functions_definition",
         type=str,
-        default="data/input/functions_definition.json",
-        help="Path to the JSON file containing function definitions.",
+        default=(
+            "data/input/"
+            "functions_definition.json"
+        ),
+        help=(
+            "Path to the JSON file containing "
+            "available function definitions."
+        ),
     )
 
     parser.add_argument(
         "--output",
         type=str,
-        default="data/output/function_results.json",
-        help="Path to the output JSON file to save the results.",
+        default=(
+            "data/output/"
+            "function_calling_results.json"
+        ),
+        help="Path where generated function calls are saved.",
     )
 
     parser.add_argument(
         "--model",
         type=str,
         default="Qwen/Qwen3-0.6B",
-        help="The model to use for generating function calls.",
+        help="Identifier of the model to use.",
     )
 
     return parser.parse_args()
 
 
-def main():
-    print("Starting function and prompts...")
+def main() -> None:
+    """
+    Run the function-calling generation pipeline.
+    """
+    print("🚀 Starting function calling...")
 
     args = parse_args()
 
-    print("Loading functions...")
+    print("📂 Loading functions and prompts...")
 
-    functions = load_functions_definition_from_json(
-        args.function_definitions
+    functions = load_function_definition(
+        args.functions_definition
     )
 
-    print("Loading prompts...")
-
-    prompts = load_prompts_from_json(
-        args.input
-    )
     if not functions:
-        raise RuntimeError("No functions loaded. Please check the function definitions file.")
+        raise RuntimeError(
+            "No function definitions found. "
+            "Please provide at least one."
+        )
+
+    prompts = load_prompts(args.input)
+
     if not prompts:
-        raise RuntimeError("No prompts loaded. Please check the input file.")
+        raise RuntimeError(
+            "No prompts found in input file. "
+            "Please provide at least one."
+        )
 
-    print("Processing prompts...")
-
+    print("⚙️ Building system prompt...")
     system = build_system_prompt(functions)
-    print(system)
 
-    print(f"loading model... {args.model}")
+    print(f"🤖 Loading model: {args.model}")
 
     try:
-        model = Small_LLM_Model(args.model)
-    except OSError as e:
-        raise RuntimeError(f"Failed to load model '{args.model}': {e}")
+        model = Small_LLM_Model(
+            model_name=args.model
+        )
+    except OSError as error:
+        raise RuntimeError(
+            f"Model {args.model} not found "
+            "or failed to download."
+        ) from error
 
+    print("🔤 Building valid token IDs...")
 
-    print(" building valid token IDs.....")
-    vocabulary = load_vocabulary(model)
-    valid_vocab= build_json_valid_ids(vocabulary)
+    vocab = load_vocabulary(model)
+    valid_ids = build_json_valid_ids(vocab)
 
-    all_results= []
+    if not valid_ids:
+        raise RuntimeError(
+            "Could not build valid token IDs."
+        )
 
+    all_results: List[Dict[str, Any]] = []
     start_time = time.time()
 
-    print("processing prompt.....\n")
+    print("⚙️ Processing prompts...\n")
 
-    for p in prompts:
-        prompt = p.prompt
+    for prompt_object in prompts:
+        prompt = prompt_object.prompt
 
-        print(f"processing prompt {prompt}")
-        full_prompt = f"{system}\n\nUser : prompt {prompt}\n\nAssistant : "
+        print(
+            f"⏳ Processing prompt: {prompt}"
+        )
+
+        full_prompt = (
+            f"{system}\n\n"
+            f"User prompt: {prompt}\n"
+            "Assistant:"
+        )
+
         input_ids = model.encode(full_prompt)
         generated_ids = input_ids[0].tolist()
 
-        all_generated = []
-        clean_json = None
-        all_generated.extend(model.encode('{"name": "')[0].tolist())
+        all_generated: List[int] = []
+        clean_json: Optional[str] = None
+        parsed: Optional[Dict[str, Any]] = None
+
+        json_start = model.encode(
+            '{"name": "'
+        )[0].tolist()
+
+        all_generated.extend(json_start)
+
         for _ in range(50):
-            logits = model.get_logits_from_input_ids(generated_ids + all_generated)
-            next_ids = get_best_valid_ids(logits, valid_vocab)
-            all_generated.append(next_ids)
+            logits = model.get_logits_from_input_ids(
+                generated_ids + all_generated
+            )
+
+            next_id = get_best_valid_token(
+                logits,
+                valid_ids,
+            )
+
+            all_generated.append(next_id)
+
             text = model.decode(all_generated)
-            clean_json = extract_json_from_text(text)
-            print(text)
-            
 
-            if clean_json:
-                try:
-                    parsed = json.loads(clean_json)
-                    break
-                except Exception:
-                    pass
-        if not clean_json:
-            parsed = {"name": None, "args": {}}
+            clean_json = extract_complete_json(
+                text
+            )
 
-        all_results.append({
+            if clean_json is None:
+                continue
+
+            try:
+                candidate = json.loads(clean_json)
+            except json.JSONDecodeError:
+                break
+
+            if validate_function_call(
+                candidate,
+                functions,
+            ):
+                parsed = candidate
+
+            break
+
+        if parsed is None:
+            parsed = {
+                "name": "none",
+                "parameters": {},
+            }
+
+        result: Dict[str, Any] = {
             "prompt": prompt,
-            "name": parsed.get("name", None),
-            "args": parsed.get("args", {}),
+            "name": parsed.get(
+                "name",
+                "none",
+            ),
+            "parameters": parsed.get(
+                "parameters",
+                {},
+            ),
+        }
 
-            
-        })
+        all_results.append(result)
 
-        if parsed.get("name", None) != None:
-            print(f" -> ✅ {parsed['name']} ({parsed.get('args', {})})")
+        if result["name"] != "none":
+            print(
+                f"  -> ✅ {result['name']}"
+                f"({result['parameters']})"
+            )
         else:
-            print(f" ->   [ERROR] could not generate function call")
+            print(
+                "  -> ❌ Could not generate "
+                "a valid function call."
+            )
 
     total_time = time.time() - start_time
-    all_parsed = [result for result in all_results if result["name"] != "none"]
 
-    os.makedirs(os.path.dirname(args.output), exist_ok=True)
+    successful_results = [
+        result
+        for result in all_results
+        if result["name"] != "none"
+    ]
 
-    with open(args.output, "w", encoding="utf-8") as f:
-        json.dump(all_parsed,f,ensure_ascii=False,indent=2)
+    output_directory = os.path.dirname(
+        args.output
+    )
+
+    if output_directory:
+        os.makedirs(
+            output_directory,
+            exist_ok=True,
+        )
+
+    try:
+        with open(
+            args.output,
+            "w",
+            encoding="utf-8",
+        ) as output_file:
+            json.dump(
+                all_results,
+                output_file,
+                ensure_ascii=False,
+                indent=2,
+            )
+    except OSError as error:
+        raise RuntimeError(
+            "Could not write output file: "
+            f"{args.output}"
+        ) from error
+
+    print(
+        "\n💾 Results saved to: "
+        f"{args.output}"
+    )
+
+    print("✨ Completed.")
+
+    print(
+        "⏱️ Total time: "
+        f"{total_time:.2f} seconds"
+    )
+
+    average_time = total_time / len(prompts)
+
+    print(
+        "📈 Average per prompt: "
+        f"{average_time:.2f} seconds"
+    )
+
+    success_count = len(successful_results)
+    total_count = len(prompts)
+
+    success_rate = (
+        success_count
+        / total_count
+        * 100
+    )
+
+    print(
+        "🎯 Success rate: "
+        f"{success_count}/{total_count} "
+        f"({success_rate:.2f}%)"
+    )
 
 
-    print(f" Result save to {args.output}")
-
-    print("Completing...")
-
-    print(f" Total time : {total_time :.2} seconds")
-
-    print(f" Average per prompt :{total_time / len(prompt):.2} seconds")
 if __name__ == "__main__":
-    main()
+    try:
+        main()
 
+    except KeyboardInterrupt:
+        print("\nUser stopped the program.")
+
+    except Exception as error:
+        print(f"Error: {error}")
