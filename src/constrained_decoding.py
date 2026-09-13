@@ -1,7 +1,7 @@
 import json
 from typing import Any, Dict, List, Optional, Set
 
-from llm_sdk import Small_LLM_Model
+from llm_sdk import Small_LLM_Model  # type: ignore[attr-defined]
 from src.models.functions_definition import (
     FunctionDefinition,
     Parameter,

@@ -4,7 +4,7 @@ import os
 import time
 from typing import Any, Dict, List, Optional
 
-from llm_sdk.llm_sdk import Small_LLM_Model
+from llm_sdk import Small_LLM_Model  # type: ignore[attr-defined]
 
 from src.constrained_decoding import (
     build_json_valid_ids,

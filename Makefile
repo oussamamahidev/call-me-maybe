@@ -15,6 +15,6 @@ lint:
 		--warn-return-any --warn-unused-ignores \
 		--ignore-missing-imports --disallow-untyped-defs \
 		--check-untyped-defs
-	@flake8 . --exclude=llm_sdk
+	@flake8 . --exclude=llm_sdk,.venv,__pycache__
 
 .PHONY: run install debug clean lint
