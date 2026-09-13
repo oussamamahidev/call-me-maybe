@@ -200,6 +200,15 @@ def main() -> None:
                 "name": "none",
                 "parameters": {},
             }
+        if parsed["name"] != "none":
+            for function in functions:
+                if function.name == parsed["name"]:
+                    for param_name, param_def in function.parameters.items():
+                        if param_def.type.lower() == "number":
+                            parsed["parameters"][param_name] = float(
+                                parsed["parameters"][param_name]
+                            )
+                    break
 
         result: Dict[str, Any] = {
             "prompt": prompt,
